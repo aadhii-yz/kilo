@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra
+CFLAGS=-Wall -Wextra -pedantic -std=c99
 
 kilo: main.c
 	$(CC) main.c -o kilo $(CFLAGS)
