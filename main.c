@@ -1,7 +1,17 @@
+#include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
+struct termios inital_termios;
+
+void disableRawMode() {
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &inital_termios);
+}
+
 void enableRawMode() {
+  tcgetattr(STDIN_FILENO, &inital_termios);
+  atexit(disableRawMode);
+
   struct termios raw;
   tcgetattr(STDIN_FILENO, &raw);
 
