@@ -1,17 +1,28 @@
+// Headers :
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
+// Data :
 struct termios inital_termios;
 
+// Terminal :
+void die(const char* s) {
+  perror(s);
+  exit(1);
+}
+
 void disableRawMode() {
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &inital_termios);
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &inital_termios) == -1)
+    die("tcsetattr");
 }
 
 void enableRawMode() {
-  tcgetattr(STDIN_FILENO, &inital_termios);
+  if (tcgetattr(STDIN_FILENO, &inital_termios) == -1)
+    die("tcgetattr");
   atexit(disableRawMode);
 
   struct termios raw;
@@ -24,17 +35,20 @@ void enableRawMode() {
   raw.c_cc[VMIN] = 0;
   raw.c_cc[VTIME] = 1;
 
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
+    die("tcsetattr");
 }
 
+// Init :
 int main(int argc, char *argv[])
 {
   enableRawMode();
 
   while (1) {
-  char ch = '\0';
+    char ch = '\0';
+    if (read(STDIN_FILENO, &ch, 1) == -1 && errno != EAGAIN)
+      die("read");
 
-    read(STDIN_FILENO, &ch, 1);
     if (iscntrl(ch)) {
       printf("%d\r\n", ch);
     } else {
