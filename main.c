@@ -1,5 +1,5 @@
 // Headers :
-
+#include <stddef.h>
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 #define _GNU_SOURCE
@@ -41,7 +41,7 @@ struct editorConfig {
   int screenRows;
   int screenCols;
   int numrows;
-  erow row;
+  erow* row;
   struct termios inital_termios;
 };
 
@@ -163,6 +163,18 @@ int getWindowSize(int* rows, int* cols) {
   }
 }
 
+// Row Operations :
+void editorAppendRow(char* s, size_t len) {
+  E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+
+  int at = E.numrows;
+  E.row[at].size = len;
+  E.row[at].chars = malloc(len + 1);
+  memcpy(E.row[at].chars, s, len);
+  E.row[at].chars[len] = '\0';
+  E.numrows++;
+}
+
 // File I/O :
 void editorOpen(char* filename) {
   FILE* fp = fopen(filename, "r");
@@ -171,16 +183,11 @@ void editorOpen(char* filename) {
   char* line = NULL;
   size_t linecap = 0;
   ssize_t linelen;
-  linelen = getline(&line, &linecap, fp);
-  if (linelen != -1) {
+  while ((linelen = getline(&line, &linecap, fp)) != -1) {
     while (linelen > 0 && (line[linelen -1] == '\r' || line[linelen - 1] == '\n')) {
       linelen--;
     }
-    E.row.size = linelen;
-    E.row.chars = malloc(linelen + 1);
-    memcpy(E.row.chars, line, linelen);
-    E.row.chars[linelen] = '\0';
-    E.numrows = 1;
+    editorAppendRow(line, linelen);
   }
 
   free(line);
@@ -213,7 +220,7 @@ void editorDrawRows(struct abuf* ab) {
   int y;
   for (y = 0; y < E.screenRows; y++) {
     if (y >= E.numrows) {
-      if (y == E.screenRows / 3) {
+      if (E.numrows == 0 && y == E.screenRows / 3) {
         char welcome[80];
         int welcomelen = snprintf(welcome, sizeof(welcome), "Kilo editor -- version %s", KILO_VERSION);
         if (welcomelen > E.screenCols)
@@ -231,9 +238,9 @@ void editorDrawRows(struct abuf* ab) {
         abAppend(ab, "~", 1);
       }
     } else {
-      int len = E.row.size;
+      int len = E.row[y].size;
       if (len > E.screenCols) len = E.screenCols;
-      abAppend(ab, E.row.chars, len);
+      abAppend(ab, E.row[y].chars, len);
     }
 
     abAppend(ab, "\x1b[K", 3);
@@ -328,6 +335,7 @@ void initEditor() {
   E.cx = 0;
   E.cy = 0;
   E.numrows = 0;
+  E.row = NULL;
 
   if (getWindowSize(&E.screenRows, &E.screenCols) == -1)
     die("getWindowSize");
