@@ -396,12 +396,20 @@ void editorProcessKeypress() {
       break;
 
     case END_KEY:
-      E.cx = E.screenCols - 1;
+      if (E.cy < E.numrows)
+        E.cx = E.row[E.cy].size;
       break;
 
     case PAGE_UP:
     case PAGE_DOWN:
       {
+        if (ch == PAGE_UP) {
+          E.cy = E.rowoff;
+        } else if (ch == PAGE_DOWN) {
+          E.cy = E.rowoff + E.screenRows -1;
+          if (E.cy > E.numrows) E.cy = E.numrows;
+        }
+
         int times = E.screenRows;
         while (times--)
           editorMoveCursor(ch == PAGE_UP ? ARROW_UP : ARROW_DOWN);
