@@ -1,16 +1,17 @@
 // Headers :
-#include <stddef.h>
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 #define _GNU_SOURCE
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 // Defines :
@@ -48,6 +49,9 @@ struct editorConfig {
   int screenCols;
   int numrows;
   erow* row;
+  char* filename;
+  char statusmsg[80];
+  time_t statusmsg_time;
   struct termios inital_termios;
 };
 
@@ -226,6 +230,9 @@ void editorAppendRow(char* s, size_t len) {
 
 // File I/O :
 void editorOpen(char* filename) {
+  free(E.filename);
+  E.filename = strdup(filename);
+
   FILE* fp = fopen(filename, "r");
   if (!fp) die("fopen");
 
@@ -315,10 +322,27 @@ void editorDrawRows(struct abuf* ab) {
     }
 
     abAppend(ab, "\x1b[K", 3);
-    if (y < E.screenRows - 1) {
-      abAppend(ab, "\r\n", 2);
+    abAppend(ab, "\r\n", 2);
+  }
+}
+
+void editorDrawStatusBar(struct abuf* ab) {
+  abAppend(ab, "\x1b[7m", 4);
+  char status[80], rstatus[80];
+  int len = snprintf(status, sizeof(status), "%.20s - %d lines", E.filename ? E.filename : "[No Name]", E.numrows);
+  int rlen = snprintf(status, sizeof(rstatus), "%d/%d", E.cy + 1, E.numrows);
+  if (len > E.screenCols) len = E.screenCols;
+  abAppend(ab, status, len);
+  while (len < E.screenCols) {
+    if (E.screenCols - len == rlen) {
+      abAppend(ab, rstatus, rlen);
+      break;
+    } else {
+      abAppend(ab, " ", 1);
+      len++;
     }
   }
+  abAppend(ab, "\x1b[m", 3);
 }
 
 void editorRefreshScreen() {
@@ -330,6 +354,7 @@ void editorRefreshScreen() {
   abAppend(&ab, "\x1b[H", 3);
 
   editorDrawRows(&ab);
+  editorDrawStatusBar(&ab);
 
   char buf[32];
   snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cy - E.rowoff) + 1, (E.rx - E.coloff) + 1);
@@ -339,6 +364,14 @@ void editorRefreshScreen() {
 
   write(STDOUT_FILENO, ab.b, ab.len);
   abFree(&ab);
+}
+
+void editorSetStatusMessage(const char* fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(E.statusmsg, sizeof(E.statusmsg), fmt, ap);
+  va_end(ap);
+  E.statusmsg_time = time(NULL);
 }
 
 // Input :
@@ -434,9 +467,14 @@ void initEditor() {
   E.coloff = 0;
   E.numrows = 0;
   E.row = NULL;
+  E.filename = NULL;
+  E.statusmsg[0] = '\0';
+  E.statusmsg_time = 0;
 
   if (getWindowSize(&E.screenRows, &E.screenCols) == -1)
     die("getWindowSize");
+
+  E.screenRows -= 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -445,6 +483,8 @@ int main(int argc, char *argv[]) {
   if (argc >= 2) {
     editorOpen(argv[1]);
   }
+
+  editorSetStatusMessage("HELP: CTRL-Q = quit");
 
   while (1) {
     editorRefreshScreen();
